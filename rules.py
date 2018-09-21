@@ -15,8 +15,10 @@ class board:
 	Pieces = {WHITE:[], BLACK:[]}
 	turn = WHITE
 	enPassant = None
+	opponentMoves = []
 
 	def __init__(self):
+		"""Kings are always the first piece"""
 		# White Pieces
 		self.Pieces[WHITE] += [king(4,WHITE), castle(0,WHITE), castle(7,WHITE), bishop(5,WHITE)]
 		self.Pieces[WHITE] +=  [rook(6,WHITE), rook(1,WHITE), bishop(2,WHITE), queen(3,WHITE)]
@@ -31,65 +33,46 @@ class board:
 		self._calcMoves()
 
 	def _calcMoves(self):
-		self.enemyMoves = [piece.validMoves(self) for piece in self.Pieces[self.turn*-1][1:]]	
+		self.enemyMoves = [self._dummyKingMoves(self.Pieces[self.turn*-1][0].index)] + [piece.validMoves(self) for piece in self.Pieces[self.turn*-1][1:]]	
 		self.enemyMovesList = [move for sublist in self.enemyMoves for move in sublist]
 		self.allMoves = [piece.validMoves(self) for piece in self.Pieces[self.turn]]
-		self.friendMoves = self.allMoves[1:]
+		
+		
 	
 	def validMoves(self):
 		# If king is in check, restrict moves to getting him out or defending
+
+		uncheckMoves = []
 		kingIndex = self.Pieces[self.turn][0].index
-		if kingIndex in self.enemyMovesList:
-			# Find checking piece
-			for pieceIndex in range(len(self.enemyMoves)):
-				for move in self.enemyMoves[pieceIndex]:
-					if move == kingIndex:
-						piece = self.Pieces[self.turn*-1][pieceIndex+1]
-						break
-			# Remove moves that don't address check
-			if isinstance(piece, (pawn, rook)):
-				uncheckMoves = [piece.index]
+		checkPieces = []
+		for piece in range(len(self.enemyMoves)):
+			for move in range(len(self.enemyMoves[piece])):
+				if kingIndex == self.enemyMoves[piece][move]:
+					checkPieces.append([self.Pieces[self.turn*-1][piece],piece])
+					
+		# If there is no check, return all moves
+		if not checkPieces:
+			return self.allMoves
+
+		# If there are 2 checking pieces, you must eliminate them
+		if len(checkPieces) > 1:
+			uncheckMoves = [piece[0].index for piece in checkPieces]
+
+		# If there is 1 checking piece, you must eliminate or block it
+		elif len(checkPieces) == 1:
+			piece = checkPieces[0]
+			if isinstance(piece[0], (pawn, rook)):
+				uncheckMoves = [piece[0].index]
 			else:
-				uncheckMoves = list(filter(lambda x: self._isBetween(x, self.Pieces[self.turn][0], piece), piece.validMoves(self))) + [piece.index]
-			validMoves = [self.allMoves[0]]
-			for moveList in self.friendMoves:
-				validMoves.append(list(filter(lambda x: x in uncheckMoves, moveList)))
-		else:
-			validMoves = self.allMoves
-		# If there is a pinned piece, restrict it's movement
-		king = self.Pieces[self.turn][0]
-		for piece in self.Pieces[self.turn*-1]:
-			if isinstance(piece, (castle, queen)):
-				if piece._xPos() == king._xPos() or piece._yPos() == king._yPos():
-					print('castle or queen is inline')
-					pinnedPiece = self.pinnedPiece(king, piece)
-					if pinnedPiece:
-						print('pinned piece')
-						pieceIndex = self.Pieces[self.turn].index(pinnedPiece)
-						validMoves[pieceIndex] = [move for move in pinnedPiece.validMoves(self) if move in piece.validMoves(self)]
+				uncheckMoves = list(filter(lambda x: self._isBetween(x, self.Pieces[self.turn][0], piece[0]), self.enemyMoves[piece[1]])) + [piece[0].index]
+		validMoves = [self.allMoves[0]]
+		for moveList in self.allMoves[1:]:
+			validMoves.append(list(filter(lambda x: x in uncheckMoves, moveList)))
 
-			elif isinstance(piece, (bishop, queen)):
-				if (piece._xPos()-king._xPos()) % (piece._yPos()-king._yPos()) == 0:
-					print('bishop or queen is diagonal')
-					pinnedPiece = self.pinnedPiece(king, piece)
-					if pinnedPiece:
-						print('pinned piece')
-						pieceIndex = self.Pieces[self.turn].index(pinnedPiece)
-						validMoves[pieceIndex] = [move for move in pinnedPiece.validMoves(self) if move in piece.validMoves(self)]
-		
+		if not any(validMoves):
+			print("Game Over")
+				
 		return validMoves
-
-	def pinnedPiece(self, king, attacker):
-		piece = None
-		moveArray = list(filter(lambda x: self._isBetween(x, king, attacker), attacker.validMoves(self)))
-		for index in moveArray:
-			if attacker.isFriend(index, self): 
-				return None
-			if attacker.isEnemy(index, self): 
-				if piece:
-					return None
-				piece = self.getPiece(index)
-		return piece
 
 	def _isBetween(self, index, king, attacker):
 		sign = lambda x: x and (1, -1)[x < 0]
@@ -99,7 +82,17 @@ class board:
 		output =  (sign(tmpPiece._xPos()-attacker._xPos()) == xDir) and (sign(tmpPiece._yPos()-attacker._yPos()) == yDir)
 		return output
 
-
+	def _dummyKingMoves(self, index):
+		validMoves = [index+8,index-8]
+		# Add left moves
+		if (index%8!=0):
+			validMoves += [index-9,index-1,index+7]
+		# Add right moves
+		if (index%8!=7):
+			validMoves += [index-7,index+1,index+9]
+		# Remove invalid up/down moves, remove friendly moves
+		validMoves = list(filter(lambda x: x<64 and x>-1, validMoves))
+		return validMoves
 
 	def move(self, prevIndex, index):
 		self.getPiece(prevIndex).move(index, self)
@@ -137,6 +130,9 @@ class board:
 """
 
 class piece:
+
+	pinned = False
+
 	def __init__(self, index, color):
 		self.index = index
 		self.color = color
@@ -169,6 +165,67 @@ class piece:
 	def isEmpty(self, index, board):
 		return not (self.isFriend(index, board) or self.isEnemy(index, board))
 		
+	def _moveHelper(self, direction, board):
+		"""Takes a direction vector and computes validMoves for it. Also sets the pinned status for opposing pieces """
+		validMoves = []
+		moveConstant = 0
+
+		# Set board constraints
+		constraints = ""
+		if direction[0] == 1:
+			constraints += "(tmpPos%8 != 0)"
+			moveConstant += 1
+		if direction[0] == -1:
+			constraints += "(tmpPos%8 != 7)"
+			moveConstant -= 1
+		if direction[0] * direction[1] != 0:
+			constraints += " and "
+		if direction[1] == 1:
+			constraints += "(tmpPos < 64)"
+			moveConstant += 8
+		if direction[1] == -1:
+			constraints += "(tmpPos > -1)"
+			moveConstant -= 8
+
+		tmpPos = self.index + moveConstant
+		while not(self.isFriend(tmpPos, board)) and eval(constraints):
+			validMoves.append(tmpPos)
+			if self.isEnemy(tmpPos, board): break
+			tmpPos += moveConstant
+
+		return validMoves
+
+	def _pinHelper(self, direction, king, board):
+		"""Checks for pinned pieces between a piece and a king. Gives a pinned piece the direction it is pinned from"""
+
+		moveConstant = 0
+		if direction[0] == 1:
+			moveConstant += 1
+		if direction[0] == -1:
+			moveConstant -= 1
+		if direction[1] == 1:
+			moveConstant += 8
+		if direction[1] == -1:
+			moveConstant -= 8
+
+		pin = False
+		index = self.index + moveConstant
+		while index != king.index:
+			if self.isFriend(index, board): 
+				return
+			elif self.isEnemy(index, board) and not pin:
+				pin = board.getPiece(index)
+			elif self.isEnemy(index, board):
+				return
+			index += moveConstant
+		if pin:
+			pin.pinned = direction
+		return
+
+		
+
+		return
+
 	def _xPos(self, index=None):
 		""" xPos ranges from 1 to 8 for piece or given location
 		"""
@@ -211,8 +268,16 @@ class pawn(piece):
 		moveIndex = self.index + self.color*9
 		if self.isEnemy(moveIndex, board) and self._yPos(moveIndex) == self._yPos()+self.color :
 			validMoves.append(moveIndex)
+		# Remove moves if pinned
+		if self.pinned:
+			moveIndex = [self.index + self.pinned[0]*-1 + self.pinned[1]*-8]
+			moveIndex.append(moveIndex[0] + self.pinned[0]*-1 + self.pinned[1]*-8)
+			print(moveIndex)
+			validMoves = [move for move in validMoves if move in moveIndex]
+			self.pinned = False
+
 		# enPassant moves
-		if board.enPassant:
+		elif board.enPassant:
 			if board.enPassant._yPos() == self._yPos():
 				if abs(board.enPassant.index-self.index) == 1:
 					validMoves.append(board.enPassant.index+self.color*8)
@@ -229,6 +294,10 @@ class pawn(piece):
 		if enPassant:
 			if enPassant.index == index-self.color*8:
 				board.remove(self.color*-1,index-self.color*8)
+		# Check for promotion
+		if self._yPos(index) == 1 or self._yPos(index) == 8:
+			board.Pieces[self.color].remove(self)
+			board.Pieces[self.color].append(queen(self.index, self.color))
 		return
 
 	def __str__(self):
@@ -251,30 +320,39 @@ class castle(piece):
 
 	def validMoves(self, board):
 		validMoves = []
-		# Up moves
-		tmpPos = self.index + 8
-		while not(self.isFriend(tmpPos, board)) and (tmpPos<64):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 8
-		# Down moves
-		tmpPos = self.index - 8
-		while not(self.isFriend(tmpPos, board)) and (tmpPos>-1):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 8
-		#Right moves
-		tmpPos = self.index + 1
-		while not(self.isFriend(tmpPos, board)) and (tmpPos%8 != 0):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 1
-		#Left moves
-		tmpPos = self.index -1
-		while not(self.isFriend(tmpPos, board)) and (tmpPos%8 != 7):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 1
+
+		# Check if castle is pinning another piece
+		enemyKing = board.Pieces[self.color*-1][0]
+		if self._xPos() == enemyKing._xPos():
+			if enemyKing._yPos()>self._yPos():
+				super()._pinHelper((0, 1), enemyKing, board)
+			else:
+				super()._pinHelper((0, -1), enemyKing, board)
+
+		elif self._yPos() == enemyKing._yPos():
+			print(self.index, enemyKing.index, board.turn)
+			if enemyKing._xPos()>self._xPos():
+				super()._pinHelper((1, 0), enemyKing, board)
+			else:
+				super()._pinHelper((-1, 0), enemyKing, board)
+
+		# Compute valid moves
+		if not self.pinned:
+			validMoves += super()._moveHelper((0,1), board)
+			validMoves += super()._moveHelper((0,-1), board)
+			validMoves += super()._moveHelper((1,0), board)
+			validMoves += super()._moveHelper((-1,0), board)
+
+		elif self.pinned[0] == 0:
+			validMoves += super()._moveHelper((0,1), board)
+			validMoves += super()._moveHelper((0,-1), board)
+
+		elif self.pinned[1] == 0:
+			validMoves += super()._moveHelper((1,0), board)
+			validMoves += super()._moveHelper((-1,0), board)
+
+		self.pinned = False
+
 		return validMoves
 
 
@@ -289,6 +367,11 @@ class rook(piece):
 		super().__init__(index,color)		
 
 	def validMoves(self, board):
+		# No valid moves if pinned to king
+		if self.pinned:
+			self.pinned = False
+			return []
+
 		validMoves = []
 		#Add left moves
 		if (self.index%8>0):
@@ -316,31 +399,34 @@ class bishop(piece):
 		super().__init__(index,color)
 
 	def validMoves(self, board):
+		# Check if bishop is pinning another piece
+		enemyKing = board.Pieces[self.color*-1][0]
+		if abs(self._xPos()-enemyKing._xPos()) == abs(self._yPos()-enemyKing._yPos()):
+			direction = [-1,-1]
+			if enemyKing._yPos()>self._yPos(): 
+				direction[1] = 1
+			if enemyKing._xPos()>self._xPos():
+				direction[0] = 1
+			super()._pinHelper(direction, enemyKing, board)
+
+		#Compute valid moves
 		validMoves = []
-		# UpRight moves
-		tmpPos = self.index + 9
-		while not(self.isFriend(tmpPos, board)) and (tmpPos<64) and (tmpPos%8 != 0):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 9
-		# UpLeft moves
-		tmpPos = self.index + 7
-		while not(self.isFriend(tmpPos, board)) and (tmpPos<64) and (tmpPos%8 != 7):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 7
-		# DownRight moves
-		tmpPos = self.index -7
-		while not(self.isFriend(tmpPos, board)) and (tmpPos>-1) and (tmpPos%8 != 0):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 7
-		# DownLeft moves
-		tmpPos = self.index -9
-		while not(self.isFriend(tmpPos, board)) and (tmpPos>-1) and (tmpPos%8 != 7):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 9
+		if not self.pinned:
+			validMoves += super()._moveHelper((1,1), board)
+			validMoves += super()._moveHelper((-1,-1), board)
+			validMoves += super()._moveHelper((1,-1), board)
+			validMoves += super()._moveHelper((-1,1), board)
+		
+		elif self.pinned[0] * self.pinned[1] == 1:
+			validMoves += super()._moveHelper((1,1), board)
+			validMoves += super()._moveHelper((-1,-1), board)
+
+		elif self.pinned[0] * self.pinned[1] == -1:
+			validMoves += super()._moveHelper((1,-1), board)
+			validMoves += super()._moveHelper((-1,1), board)
+
+		self.pinned = False
+
 		return validMoves
 
 	def __str__(self):
@@ -354,57 +440,61 @@ class queen(piece):
 		super().__init__(index,color)
 
 	def validMoves(self, board):
+
+		# Check if castle is pinning another piece
+		enemyKing = board.Pieces[self.color*-1][0]
+		if self._xPos() == enemyKing._xPos():
+			if enemyKing._yPos()>self._yPos():
+				super()._pinHelper((0, 1), enemyKing, board)
+			else:
+				super()._pinHelper((0, -1), enemyKing, board)
+
+		elif self._yPos() == enemyKing._yPos():
+			print(self.index, enemyKing.index, board.turn)
+			if enemyKing._xPos()>self._xPos():
+				super()._pinHelper((1, 0), enemyKing, board)
+			else:
+				super()._pinHelper((-1, 0), enemyKing, board)
+
+		elif abs(self._xPos()-enemyKing._xPos()) == abs(self._yPos()-enemyKing._yPos()):
+			direction = [-1,-1]
+			if enemyKing._yPos()>self._yPos(): 
+				direction[1] = 1
+			if enemyKing._xPos()>self._xPos():
+				direction[0] = 1
+			super()._pinHelper(direction, enemyKing, board)
+
 		validMoves = []
-		# Castle moves
-		# Up moves
-		tmpPos = self.index + 8
-		while not(self.isFriend(tmpPos, board)) and (tmpPos<64):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 8
-		# Down moves
-		tmpPos = self.index - 8
-		while not(self.isFriend(tmpPos, board)) and (tmpPos>-1):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 8
-		#Right moves
-		tmpPos = self.index + 1
-		while not(self.isFriend(tmpPos, board)) and (tmpPos%8 != 0):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 1
-		#Left moves
-		tmpPos = self.index -1
-		while not(self.isFriend(tmpPos, board)) and (tmpPos%8 != 7):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 1
-		# Bishop moves
-		# UpRight moves
-		tmpPos = self.index + 9
-		while not(self.isFriend(tmpPos, board)) and (tmpPos<64) and (tmpPos%8 != 0):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 9
-		# UpLeft moves
-		tmpPos = self.index + 7
-		while not(self.isFriend(tmpPos, board)) and (tmpPos<64) and (tmpPos%8 != 7):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos += 7
-		# DownRight moves
-		tmpPos = self.index -7
-		while not(self.isFriend(tmpPos, board)) and (tmpPos>-1) and (tmpPos%8 != 0):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 7
-		# DownLeft moves
-		tmpPos = self.index -9
-		while not(self.isFriend(tmpPos, board)) and (tmpPos>-1) and (tmpPos%8 != 7):
-			validMoves.append(tmpPos)
-			if self.isEnemy(tmpPos, board): break
-			tmpPos -= 9
+
+		# Compute valid moves
+		if not self.pinned:
+			validMoves += super()._moveHelper((0,1), board)
+			validMoves += super()._moveHelper((0,-1), board)
+			validMoves += super()._moveHelper((1,0), board)
+			validMoves += super()._moveHelper((-1,0), board)
+			validMoves += super()._moveHelper((1,1), board)
+			validMoves += super()._moveHelper((1,-1), board)
+			validMoves += super()._moveHelper((-1,-1), board)
+			validMoves += super()._moveHelper((-1,1), board)
+
+		elif self.pinned[0] == 0:
+			validMoves += super()._moveHelper((0,1), board)
+			validMoves += super()._moveHelper((0,-1), board)
+
+		elif self.pinned[1] == 0:
+			validMoves += super()._moveHelper((1,0), board)
+			validMoves += super()._moveHelper((-1,0), board)
+
+		elif self.pinned[0] * self.pinned[1] == 1:
+			validMoves += super()._moveHelper((1,1), board)
+			validMoves += super()._moveHelper((-1,-1), board)
+
+		elif self.pinned[0] * self.pinned[1] == -1:
+			validMoves += super()._moveHelper((1,-1), board)
+			validMoves += super()._moveHelper((-1,1), board)
+
+		self.pinned = False
+
 		return validMoves
 
 	def __str__(self):

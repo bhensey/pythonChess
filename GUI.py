@@ -22,7 +22,7 @@ class GUI:
  
 	def selected(self, event):
 		self.drawGame()
-		index = self.squareList.index(event.widget)
+		index = self.squareList.index(event. widget)
 		validMoves = self.validMoves[self.board.Pieces[self.board.turn].index(self.board.getPiece(index))]
 		for square in validMoves:
 			self.squareList[square].config(bg="dark sea green")

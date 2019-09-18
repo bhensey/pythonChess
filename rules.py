@@ -247,6 +247,7 @@ class piece:
 
 class pawn(piece):
 	
+	value = 1
 	firstMove = True
 
 	def __init__(self, index, color):
@@ -272,7 +273,6 @@ class pawn(piece):
 		if self.pinned:
 			moveIndex = [self.index + self.pinned[0]*-1 + self.pinned[1]*-8]
 			moveIndex.append(moveIndex[0] + self.pinned[0]*-1 + self.pinned[1]*-8)
-			print(moveIndex)
 			validMoves = [move for move in validMoves if move in moveIndex]
 			self.pinned = False
 
@@ -308,6 +308,7 @@ class pawn(piece):
 
 class castle(piece):
 
+	value = 5
 	firstMove = True
 
 	def __init__(self, index, color):
@@ -330,7 +331,6 @@ class castle(piece):
 				super()._pinHelper((0, -1), enemyKing, board)
 
 		elif self._yPos() == enemyKing._yPos():
-			print(self.index, enemyKing.index, board.turn)
 			if enemyKing._xPos()>self._xPos():
 				super()._pinHelper((1, 0), enemyKing, board)
 			else:
@@ -363,6 +363,9 @@ class castle(piece):
 			return super().__str__('♜')
 	
 class rook(piece):
+
+	value = 3
+
 	def __init__(self, index, color):
 		super().__init__(index,color)		
 
@@ -395,6 +398,9 @@ class rook(piece):
 			return super().__str__('♞')
 
 class bishop(piece):
+
+	value = 3
+
 	def __init__(self, index, color):
 		super().__init__(index,color)
 
@@ -436,6 +442,9 @@ class bishop(piece):
 			return super().__str__('♝')
 
 class queen(piece):
+
+	value = 9
+
 	def __init__(self, index, color):
 		super().__init__(index,color)
 
@@ -450,7 +459,6 @@ class queen(piece):
 				super()._pinHelper((0, -1), enemyKing, board)
 
 		elif self._yPos() == enemyKing._yPos():
-			print(self.index, enemyKing.index, board.turn)
 			if enemyKing._xPos()>self._xPos():
 				super()._pinHelper((1, 0), enemyKing, board)
 			else:
@@ -504,6 +512,8 @@ class queen(piece):
 			return super().__str__('♛')
 
 class king(piece):
+
+	value = 0
 
 	firstMove = True
 

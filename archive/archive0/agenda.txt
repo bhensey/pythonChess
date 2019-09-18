@@ -1,0 +1,39 @@
+
+**GUI**
+
+- show valid moves, then trigger move if they are selected
+
+Input: 
+
+	- Piece positions -> "list of pieces with positions[0,1]"
+	- Player click -> "which tile of the array"
+
+Output:
+
+	- Player move -> "Where is a given piece going"
+
+States:
+
+	- Static display
+	- Piece selected, display possible moves
+
+
+**Helper**
+	- Valid player moves -> "What are the options for the player"
+
+
+
+
+**Backend**
+
+Input: Player moves
+Output: Board state
+
+
+
+
+
+
+
+
+
